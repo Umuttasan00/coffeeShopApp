@@ -14,17 +14,36 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set Default Scheme
         run: |
           scheme_list=$(xcodebuild -list -json | tr -d "\n")
-          default=$(echo $scheme_list | ruby -e "require 'json'; puts JSON.parse(STDIN.gets)['project']['targets'][0]")
-          echo $default | cat >default
+          default=$(echo $scheme_list | ruby -e "require 'json'; puts JSON.parse(STDIN.gets)['project']['targets'][0]['name']")
           echo Using default scheme: $default
+          echo $default > default
+
       - name: Build
-        env:
-          scheme: ${{ 'default' }}
         run: |
-          if [ $scheme = default ]; then scheme=$(cat default); fi
-          if [ "`ls -A | grep -i \\.xcworkspace\$`" ]; then filetype_parameter="workspace" && file_to_build="`ls -A | grep -i \\.xcworkspace\$`"; else filetype_parameter="project" && file_to_build="`ls -A | grep -i \\.xcodeproj\$`"; fi
-          file_to_build=`echo $file_to_build | awk '{$1=$1;print}'`
-          xcodebuild clean build analyze -scheme "$scheme" -"$filetype_parameter" "$file_to_build" | xcpretty && exit ${PIPESTATUS[0]}
+          scheme=$(cat default)
+          echo "Using scheme: $scheme"
+
+          if [ "`ls -A | grep -i \\.xcworkspace\$`" ]; then 
+            filetype_parameter="workspace"
+            file_to_build="`ls -A | grep -i \\.xcworkspace\$`"
+          else 
+            filetype_parameter="project"
+            file_to_build="`ls -A | grep -i \\.xcodeproj\$`"
+          fi
+          
+          file_to_build=$(echo $file_to_build | awk '{$1=$1;print}')
+          echo "Building with file: $file_to_build"
+
+          # Build and analyze
+          xcodebuild clean build analyze -scheme "$scheme" -"$filetype_parameter" "$file_to_build" | xcpretty
+          exit_code=${PIPESTATUS[0]}
+          
+          # Check if build was successful
+          if [ $exit_code -ne 0 ]; then
+            echo "Build failed with exit code $exit_code"
+            exit $exit_code
+          fi
